@@ -1,0 +1,80 @@
+# Minimum Yaml start file will be used as start template for build the complete azure-pipeline.yml in config environment Directory
+# Either add variables to your Azure DevOps Pipeline or change the variable to parameters or fill in when run
+name: PackerImageSample
+parameters:
+- name: Subscription
+  type: string
+  default: $(Subscription)
+- name: SubscriptionId
+  type: string
+  default: $(SubscriptionId)
+- name: ResourceGroupName
+  type: string
+  default: $(ResourceGroupName)
+- name: DirectoryImageConfiguration
+  type: string
+  default: $(DirectoryImageConfiguration)
+- name: KeyVaultName
+  type: string
+  default: $(KeyVaultName)
+- name: PackerServicePrincipale
+  type: string
+  default: $(PackerServicePrincipale)
+- name: image_name
+  type: string
+  default: $(image_name)
+
+
+trigger: none
+
+variables:
+
+  # Agent VM image name
+  vmImageName: 'vs2017-win2016'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    pool:
+      name: Hosted VS2017
+      demands: 
+      - msbuild
+
+    steps:
+      - task: PublishPipelineArtifact@1
+        inputs:
+          path: $(System.DefaultWorkingDirectory)
+          artifact: Sources
+        
+- stage: Deploy
+  displayName: Deploy stage
+  dependsOn: Build
+  condition: succeeded()
+
+  jobs:
+  - deployment: Deploy
+    displayName: Deploy
+    pool:
+      name: Hosted VS2017
+    environment: 'development'
+    
+
+    strategy:
+      runOnce:
+        deploy:
+
+          steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifact: Sources
+          
+          - task: AzurePowerShell@5
+            inputs:
+              azureSubscription: ${{ parameters.Subscription }}
+              ScriptType: 'FilePath'
+              ScriptPath: '$(Pipeline.Workspace)/CreateImagePacker/createImageRunPacker.ps1'
+              scriptArguments:
+                -subscriptionID  ${{ parameters.SubscriptionId }}  -ResourceGroupName  ${{ parameters.ResourceGroupName }} -KeyVaultName  ${{ parameters.KeyVaultName }}  -PackerServicePrincipale  ${{ parameters.PackerServicePrincipale }}  -DirectoryImageConfiguration  ${{ parameters.DirectoryImageConfiguration }} -image_name ${{ parameters.image_name }}
+              azurePowerShellVersion: 'LatestVersion'
+              pwsh: true'
